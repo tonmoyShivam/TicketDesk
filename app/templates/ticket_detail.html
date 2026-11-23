@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}#{{ ticket.id }} {{ ticket.title }}{% endblock %}
+{% block content %}
+<div class="heading-row">
+  <h1>#{{ ticket.id }} {{ ticket.title }}</h1>
+  <span class="pill big status-{{ ticket.status|lower|replace(' ', '-') }}">{{ ticket.status }}</span>
+</div>
+<p class="muted">
+  Raised by {{ ticket.creator.display_name }} on {{ ticket.created_at.strftime('%d %b %Y %H:%M') }} ·
+  {{ ticket.category }} · <span class="pill prio-{{ ticket.priority|lower }}">{{ ticket.priority }}</span> ·
+  Assigned to {{ ticket.assignee.display_name if ticket.assignee else 'nobody yet' }}
+</p>
+
+<div class="grid-main">
+  <div>
+    <section class="card">
+      <h2>Description</h2>
+      <p class="description">{{ ticket.description }}</p>
+    </section>
+
+    <section class="card">
+      <h2>Attachments</h2>
+      {% if attachments %}
+      <table class="plain">
+        <thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th>Processing</th></tr></thead>
+        {% for a, tags in attachments %}
+        <tr>
+          <td><a href="/attachments/{{ a.id }}">{{ a.original_name }}</a></td>
+          <td class="num">{{ '%.1f'|format(a.size_bytes / 1024) }} KB</td>
+          <td class="muted">{{ a.uploader.display_name }}, {{ a.uploaded_at.strftime('%d %b %H:%M') }}</td>
+          <td>
+            <span class="pill proc-{{ tags['processing-status'] }}">{{ tags['processing-status'] }}</span>
+            {% if tags.get('reason') and tags.get('reason') != 'ok' %}<span class="muted">{{ tags['reason'] }}</span>{% endif %}
+            {% if tags.get('sha256') %}<span class="muted mono" title="{{ tags['sha256'] }}">sha256 {{ tags['sha256'][:12] }}…</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% else %}
+      <p class="muted">No attachments.</p>
+      {% endif %}
+      {% if ticket.status != 'Closed' %}
+      <form class="upload" method="post" action="/tickets/{{ ticket.id }}/attachments" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="file" name="file" required>
+        <button class="btn btn-small" type="submit">Upload</button>
+        <p class="muted small">Allowed: {{ allowed_ext }} · up to {{ max_mb }} MB</p>
+      </form>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>History</h2>
+      <ol class="history">
+        {% for h in ticket.history %}
+        <li>
+          <span class="muted">{{ h.changed_at.strftime('%d %b %Y %H:%M') }}</span>
+          <strong>{{ h.actor.display_name }}</strong>
+          {% if h.from_status %}moved {{ h.from_status }} → {{ h.to_status }}{% else %}created the ticket{% endif %}
+          {% if h.note and h.from_status %}<div class="note">{{ h.note }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+
+  <aside>
+    {% if user.is_staff %}
+    <section class="card">
+      <h2>Update status</h2>
+      {% if next_statuses %}
+      <form method="post" action="/tickets/{{ ticket.id }}/status">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Move to
+          <select name="new_status">{% for s in next_statuses %}<option>{{ s }}</option>{% endfor %}</select>
+        </label>
+        <label>Note (optional) <textarea name="note" rows="3"></textarea></label>
+        <button class="btn" type="submit">Update</button>
+      </form>
+      {% else %}
+      <p class="muted">This ticket is closed.</p>
+      {% endif %}
+    </section>
+    <section class="card">
+      <h2>Assignment</h2>
+      <form method="post" action="/tickets/{{ ticket.id }}/assign">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="assignee_id">
+          <option value="">Unassigned</option>
+          {% for s in staff %}<option value="{{ s.id }}" {% if ticket.assigned_to == s.id %}selected{% endif %}>{{ s.display_name }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-small" type="submit">Save</button>
+      </form>
+    </section>
+    {% else %}
+    <section class="card">
+      <h2>What happens next</h2>
+      <p class="muted">The support team will pick this up and move it through In Progress → Resolved → Closed. You'll see each change in the history.</p>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

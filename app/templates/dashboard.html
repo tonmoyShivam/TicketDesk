@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="muted">{% if user.is_staff %}All tickets{% else %}Your tickets{% endif %} · {{ total }} in total</p>
+
+<section class="stats">
+  {% for status, count in status_counts %}
+  <a class="stat stat-{{ status|lower|replace(' ', '-') }}" href="/tickets?status={{ status|urlencode }}">
+    <span class="stat-num">{{ count }}</span>
+    <span class="stat-label">{{ status }}</span>
+  </a>
+  {% endfor %}
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Active tickets by priority</h2>
+    <table class="plain">
+      {% for priority, count in priority_counts %}
+      <tr><td><span class="pill prio-{{ priority|lower }}">{{ priority }}</span></td><td class="num">{{ count }}</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  <section class="card">
+    <h2>Recently updated</h2>
+    {% if recent %}
+    <ul class="recent">
+      {% for t in recent %}
+      <li><a href="/tickets/{{ t.id }}">#{{ t.id }} {{ t.title }}</a> <span class="pill status-{{ t.status|lower|replace(' ', '-') }}">{{ t.status }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No tickets yet. <a href="/tickets/new">Raise the first one.</a></p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+#!/bin/bash
+# TicketDesk first-boot bootstrap. Log: /var/log/ticketdesk-bootstrap.log
+set -euo pipefail
+exec > >(tee -a /var/log/ticketdesk-bootstrap.log) 2>&1
+
+dnf install -y git docker
+systemctl enable --now docker
+
+# Docker Compose v2 plugin (not packaged for Amazon Linux 2023)
+COMPOSE_VERSION=v2.29.7
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+mkdir -p /opt/ticketdesk
+if [ ! -d /opt/ticketdesk/app/.git ]; then
+  git clone --depth 1 --branch "${repo_branch}" "${repo_url}" /opt/ticketdesk/app
+fi
+
+# Runtime configuration (root-only). No DB password here.
+install -d -m 700 /etc/ticketdesk
+if [ ! -f /etc/ticketdesk/ticketdesk.env ]; then
+  umask 077
+  cat > /etc/ticketdesk/ticketdesk.env <<EOF
+AWS_REGION=${aws_region}
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_SECRET_ARN=${db_secret_arn}
+STORAGE_BACKEND=s3
+S3_BUCKET=${bucket_name}
+MAX_UPLOAD_MB=${max_upload_mb}
+SECRET_KEY=$(openssl rand -hex 32)
+EOF
+  umask 022
+fi
+
+# Settings the compose file needs for CloudWatch logging (not secret).
+cat > /etc/ticketdesk/compose.env <<EOF
+AWS_REGION=${aws_region}
+APP_LOG_GROUP=${app_log_group}
+EOF
+
+bash /opt/ticketdesk/app/deploy/ec2/install.sh
